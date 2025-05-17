@@ -1,0 +1,133 @@
+version: '3.8'
+
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    environment:
+      - NODE_ENV=production
+    depends_on:
+      - api
+      - scheduler
+      - scanner
+      - reports
+    networks:
+      - ransomeye-network
+
+  api:
+    build: ./backend/api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/ransomeye
+      - NODE_ENV=production
+    depends_on:
+      - db
+      - redis
+      - scanner
+    networks:
+      - ransomeye-network
+
+  scanner:
+    build: ./backend/network-scanner
+    ports:
+      - "5000:5000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/ransomeye
+      - NODE_ENV=production
+    volumes:
+      - scanner_data:/data
+    networks:
+      - ransomeye-network
+
+  db:
+    image: postgres:13
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=ransomeye
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - ransomeye-network
+
+  redis:
+    image: redis:6
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - ransomeye-network
+
+  ai:
+    build: ./backend/ai
+    environment:
+      - MODEL_PATH=/models
+      - NODE_ENV=production
+    volumes:
+      - models:/models
+    networks:
+      - ransomeye-network
+
+  scanner:
+    build: ./backend/scanner
+    environment:
+      - SCAN_INTERVAL=3600
+      - NODE_ENV=production
+    volumes:
+      - scan_data:/scan_data
+    networks:
+      - ransomeye-network
+
+  scheduler:
+    build: ./backend/scheduler
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=production
+    networks:
+      - ransomeye-network
+
+  reports:
+    build: ./backend/reports
+    environment:
+      - NODE_ENV=production
+    volumes:
+      - reports:/reports
+    networks:
+      - ransomeye-network
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./frontend/src/grafana:/etc/grafana/provisioning/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    networks:
+      - ransomeye-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./frontend/src/grafana/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - ransomeye-network
+
+networks:
+  ransomeye-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  models:
+  scan_data:
+  reports:
